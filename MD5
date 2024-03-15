@@ -1,0 +1,15 @@
+a88b91aeed28254833a317290913c65f *DESCRIPTION
+8ee793ef42e1bee5b6cd5252fb676235 *LICENSE
+c7dfcf1d583253cca49cfc3db729bf3d *NAMESPACE
+95cb909d84c68fa59fa551b057fdf484 *R/convex_hull.R
+46d9ebecb59df4c79a7c8ed7eb526707 *R/cv_pensynth.R
+0080ca97a5038856e1ce8d98c8c470c3 *R/pensynth.R
+39e2fa4767a58bac4f7c2818b9c268ed *R/standardization.R
+e9a942a0c548b17f6a34be47ed6a9b9d *man/cv_pensynth.Rd
+48e54f11076baae3306716e50edfe641 *man/in_convex_hull.Rd
+c0c35d8aaa44cc77f365a8405e096d11 *man/pensynth.Rd
+ab90007b32de44d1a4d95844133a9693 *man/plot_path.Rd
+ed7cf10aef7af8fd22992cedec39bcfc *man/standardize_X.Rd
+694d501f99f5440df125f7ac91df8490 *tests/testthat.R
+b8d0209aeaec9f323fa67a90700ae5b2 *tests/testthat/test-cvpensynth.R
+41c6d0c607dc704a8138867e8f0ac4aa *tests/testthat/test-pensynth.R
