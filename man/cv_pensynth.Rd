@@ -2,14 +2,14 @@
 % Please edit documentation in R/cv_pensynth.R
 \name{cv_pensynth}
 \alias{cv_pensynth}
-\title{Cross-validated penalized synthetic control estimator}
+\title{Hold-out validated penalized synthetic control estimator}
 \usage{
 cv_pensynth(
   X1,
   X0,
-  v,
   Z1,
   Z0,
+  v = 1,
   nlambda = 100,
   opt_pars = clarabel::clarabel_control(),
   standardize = TRUE,
@@ -21,11 +21,11 @@ cv_pensynth(
 
 \item{X0}{\verb{N_covars by N_donors matrix} of donor unit covariates}
 
-\item{v}{\verb{N_covars vector} of variable weights}
-
 \item{Z1}{\verb{N_targets by 1 matrix} of treated unit hold-out outcome}
 
 \item{Z0}{\verb{N_targets by N_donors matrix} of donor unit hold-out outcome}
+
+\item{v}{\verb{N_covars vector} of variable weights, default 1}
 
 \item{nlambda}{\code{integer} length of lambda sequence (see details)}
 
@@ -41,33 +41,20 @@ A list of the lambda sequence, the associated weights, and the mses. If
 the solvers.
 }
 \description{
-Compute a penalized synthetic control estimator with cross-validation for the
+Compute a penalized synthetic control estimator with hold-out validation for the
 lambda penalty parameter. Lambda will be determined by minimizing the mean squared
 error on a hold-out set of pre-intervention outcome time-series.
 }
 \details{
 The lambda sequence is an exponentially increasing sequence where
-The minimum lambda is always 1e-7, the max lambda is determined by the data.
+The minimum lambda is always 1e-11, the max lambda is determined by the data.
 }
 \examples{
 set.seed(45)
-N_covar <- 7
-N_donor <- 50
-N_target <- 12
-
-w  <- runif(N_donor)
-w[5:N_donor] <- 0
-w  <- w / sum(w)
-v  <- rep(1, N_covar)
-X0 <- matrix(rnorm(N_covar*N_donor), N_covar)
-X1 <- X0\%*\%w
-Z0 <- matrix(rnorm(N_target*N_donor), N_target)
-Z1 <- Z0\%*\%w
-
-res <- cv_pensynth(X1, X0, v, Z1, Z0)
-plot_path(res)
-
+dat <- simulate_data()
+res <- with(dat, cv_pensynth(X1, X0, Z1, Z0))
+plot(res)
 }
 \seealso{
-\code{\link[=pensynth]{pensynth()}} \code{\link[=plot_path]{plot_path()}}
+\code{\link[=pensynth]{pensynth()}}, \code{\link[=plot.cvpensynth]{plot.cvpensynth()}}, \code{\link[=placebo_test]{placebo_test()}}, \code{\link[=simulate_data]{simulate_data()}}
 }

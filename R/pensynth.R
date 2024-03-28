@@ -7,15 +7,15 @@
 #'
 #' @param X1 `N_covars by 1 matrix` of treated unit covariates
 #' @param X0 `N_covars by N_donors matrix` of donor unit covariates
-#' @param v `N_covars vector` of variable weights
+#' @param v `N_covars vector` of variable weights (default 1)
 #' @param lambda `numeric` penalization parameter
 #' @param opt_pars `clarabel` settings using [clarabel::clarabel_control()]
 #' @param standardize `boolean` whether to standardize the input matrices (default TRUE)
 #'
 #' @details This routine uses the same notation of the original [Synth::synth()] implementation
-#' but uses a different, faster quadratic program solver (namely, [osqp::osqp()]). Additionally, it
-#' implements the penalization procedure described in Abadie & L'Hour (2021), such that the loss
-#' function is as in equation 5 of that paper (but for a single treated unit).
+#' but uses a different, faster quadratic program solver (namely, [clarabel::clarabel()]).
+#' Additionally, it implements the penalization procedure described in Abadie & L'Hour (2021),
+#' such that the loss function is as in equation 5 of that paper (but for a single treated unit).
 #'
 #' Variable weights are not optimized by this function, meaning they need to be pre-specified.
 #' This is by design.
@@ -27,36 +27,17 @@
 #' A penalized synthetic control estimator for disaggregated data.
 #' _Journal of the American Statistical Association, 116_(536), 1817-1834.
 #'
-#' @return A list with two values: `w`, the estimated weights; and
+#' @returns A list with two values: `w`, the estimated weights; and
 #' `solution`, the result of the optimization.
 #'
 #' @importFrom utils capture.output
 #'
-#' @examples
-#' # generate some data
-#' X0 <- matrix(
-#'   c(1, 1.3,
-#'     0.5, 1.8,
-#'     1.1, 2.4,
-#'     1.8, 1.8,
-#'     1.3, 1.8), 2)
-#' X1 <- matrix(c(0.8, 1.65), 2)
-#' v <- rep(1, 2)
+#' @example R/examples/example_pensynth.R
 #'
-#' # run classic synthetic control (no penalization)
-#' res <- pensynth(X1, X0, v)
-#' plot(t(X0))
-#' points(t(X1), pch = 2)
-#' points(t(X0%*%res$w), pch = 3)
-#'
-#' # run synthetic control with penalty
-#' res <- pensynth(X1, X0, v, lambda = 0.5)
-#' points(t(X0 %*% res$w), pch = 4)
-#'
-#' @seealso [cv_pensynth()] [Synth::synth()]
+#' @seealso [cv_pensynth()], [placebo_test()], [simulate_data()], [Synth::synth()]
 #'
 #' @export
-pensynth <- function(X1, X0, v, lambda = 0, opt_pars = clarabel::clarabel_control(), standardize = TRUE) {
+pensynth <- function(X1, X0, v = 1, lambda = 0, opt_pars = clarabel::clarabel_control(), standardize = TRUE) {
   if (standardize) {
     st <- standardize_X(X1, X0)
     X0 <- st$X0
@@ -72,25 +53,31 @@ pensynth <- function(X1, X0, v, lambda = 0, opt_pars = clarabel::clarabel_contro
   X1VX0 <- crossprod(X1v, X0v)
   Delta <- apply(X0v - c(X1v), 2, crossprod)
 
-  # Constraint matrices
-  Amat <- rbind(
-    rep(1, N_donors), # Sum to 1 constraint
-    -diag(N_donors) # Individ. weights gte 0 constraint
+  # Constraint matrices (sparse for efficiency)
+  # Amat <- rbind(
+  #   rep(1, N_donors), # Sum to 1 constraint
+  #   -diag(N_donors) # Individ. weights gte 0 constraint
+  # )
+  Amat <- Matrix::sparseMatrix(
+    i = c(rep(1, N_donors), 2:(N_donors + 1)),
+    j = c(1:N_donors, 1:N_donors),
+    x = c(rep(1, N_donors), rep(-1, N_donors)),
+    repr = "C"
   )
   B <- c(
     1, # Sum to 1 constraint
     rep(0, N_donors) # Individ. weights gte 0 constraint
   )
 
-# Run the quadratic program solver
+  # Run the quadratic program solver
   result <- clarabel::clarabel(
     P = X0VX0,
     q = -X1VX0 + lambda*Delta,
     A = Amat,
     b = B,
     cones = list(
-      z = 1L, # There are 1 equalities
-      l = N_donors # There are N_donors * 2 inequalities
+      z = 1L, # There is 1 equality
+      l = N_donors # There are N_donors inequalities
     ),
     control = opt_pars
   )
@@ -101,5 +88,55 @@ pensynth <- function(X1, X0, v, lambda = 0, opt_pars = clarabel::clarabel_contro
   result$status <- names(clarabel::solver_status_descriptions()[result$status])
 
 
-  return(list(w = result$x, solution = result))
+  return(structure(
+    .Data = list(
+      w = result$x,
+      solution = result,
+      call = match.call()
+    ),
+    class = "pensynth"
+  ))
+}
+
+#' Print pensynth model
+#'
+#' @param x a pensynth object
+#' @param ... ignored
+#'
+#' @method print pensynth
+#'
+#' @returns the pensynth object, invisibly
+#'
+#' @export
+print.pensynth <- function(x, ...) {
+  cat("Pensynth model\n--------------\n")
+  cat("- call: ")
+  print(x$call)
+  cat("- solution:", x$solution$status, "\n")
+  cat("- w:", round(x$w, 3)[1:min(length(x$w), 8)])
+  if(length(x$w) > 8) cat("...")
+  return(invisible(x))
+}
+
+
+#' Create prediction from pensynth model
+#'
+#' Matrix multiplies the values in `newdata` by the unit weights
+#' extracted from the pensynth object to produce predicted
+#' values.
+#'
+#' @param object a fitted cvpensynth model
+#' @param newdata N_values * N_donors matrix of
+#' values for the donor units.
+#' @param ... ignored
+#'
+#' @returns a matrix (column vector) of predicted values
+#'
+#' @importFrom stats predict approx
+#'
+#' @method predict pensynth
+#'
+#' @export
+predict.pensynth <- function(object, newdata, ...) {
+  return(newdata %*% object$w)
 }
